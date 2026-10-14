@@ -1,0 +1,27 @@
+# OpenCode configuration and agents
+.opencode/
+
+# Two-agent coordination guide
+GUIDE.md
+
+# Architecture and structure diagrams
+structre.png
+structure.png
+structure.png.png
+
+# Node / TypeScript
+node_modules/
+dist/
+
+# Secrets (placeholders only in repo)
+.env
+
+# Local runtime config (may hold real labels/recipients — never commit)
+config.json
+
+# Temporary scratch scripts
+scratch/
+
+# Large recordings (share via Drive link if >50MB)
+recording/*.mp4
+!recording/.gitkeep

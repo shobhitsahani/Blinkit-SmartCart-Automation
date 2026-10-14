@@ -1,0 +1,70 @@
+{
+  "project": "Blinkit-SmartCart-Automation",
+  "generated_at": "2026-10-14T17:41:00+05:30",
+  "pad_version": "11.2609.183.0 (detected 2026-10-14; corrected from stale dual-version string)",
+  "target_browser": "Google Chrome",
+  "flows": [
+    {
+      "order": 1,
+      "flow_name": "ErrorHandling",
+      "script_file": "Flow1_ErrorHandling.robin",
+      "inputs": ["FailedOperation", "ErrorMessage", "ExecutionId"],
+      "outputs": ["ErrorCategory", "ShouldRetry", "SafeToStop"],
+      "critical_safety_rules": [
+        "ADDRESS, CART, SAFETY, and AUTH categories immediately set SafeToStop=True and call Stop flow",
+        "Transient errors flag ShouldRetry=True within max_retries limit",
+        "All events written to outputs/execution_log.csv"
+      ]
+    },
+    {
+      "order": 2,
+      "flow_name": "ShoppingProcess",
+      "script_file": "Flow2_ShoppingProcess.robin",
+      "inputs": ["ConfigJson", "ExecutionId"],
+      "outputs": ["CartJson", "BudgetStatus", "AddressStatus"],
+      "critical_safety_rules": [
+        "Launches Blinkit in Google Chrome with PA extension enabled",
+        "Address verification gate stops execution immediately if displayed address mismatches config",
+        "Per-item search (/s/?q=) and deterministic addition to cart",
+        "Verification of cart totals against budget limit",
+        "Absolute stop before payment: no place order or checkout clicks"
+      ]
+    },
+    {
+      "order": 3,
+      "flow_name": "EmailNotification",
+      "script_file": "Flow3_EmailNotification.robin",
+      "inputs": ["SummaryJson", "Recipient", "TestMode"],
+      "outputs": ["EmailStatus"],
+      "critical_safety_rules": [
+        "When TestMode=true, drafts notification and logs SKIPPED without sending real emails",
+        "Live mode uses authorized connection only, never storing passwords in flow"
+      ]
+    },
+    {
+      "order": 4,
+      "flow_name": "WhatsAppNotification",
+      "script_file": "Flow4_WhatsAppNotification.robin",
+      "inputs": ["SummaryJson", "Recipient", "TestMode"],
+      "outputs": ["WaStatus"],
+      "critical_safety_rules": [
+        "When TestMode=true, records SKIPPED without sending external messages",
+        "When WhatsApp Business is unconfigured, logs UNSUPPORTED with fallback note",
+        "Tokens loaded from environment variable WHATSAPP_TOKEN, never committed"
+      ]
+    },
+    {
+      "order": 5,
+      "flow_name": "BlinkitShoppingAssistant",
+      "script_file": "Flow5_BlinkitShoppingAssistant.robin",
+      "inputs": ["ConfigPath"],
+      "outputs": ["ExecutionId", "OverallStatus"],
+      "critical_safety_rules": [
+        "Pre-flight config validation via npm run validate-config before any browser launch",
+        "Orchestrates subflows in sequence: ShoppingProcess -> gen-summary -> Email -> WhatsApp",
+        "Wraps subflows with ErrorHandling safe-stops",
+        "Outputs execution_report.txt and audit logs to outputs/"
+      ]
+    }
+  ]
+}

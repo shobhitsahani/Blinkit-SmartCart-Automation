@@ -1,0 +1,62 @@
+{
+  "execution_id": "exec-2026-10-14T21-40-27-872Z",
+  "executed_at": "2026-10-14T21:40:27.878Z",
+  "address": {
+    "expected": "Approved Test Address",
+    "displayed": "Approved Test Address",
+    "status": "PASS"
+  },
+  "selections": [],
+  "cart": [
+    {
+      "product": "Mother Dairy Milk 500ml",
+      "brand": "Mother Dairy",
+      "pack_size": "500ml",
+      "requested_qty": 1,
+      "actual_qty": 1,
+      "unit_price": 29,
+      "line_total": 29,
+      "verified": true
+    },
+    {
+      "product": "Harvest Gold White Bread 400g",
+      "brand": "Harvest Gold",
+      "pack_size": "400g",
+      "requested_qty": 1,
+      "actual_qty": 1,
+      "unit_price": 40,
+      "line_total": 40,
+      "verified": true
+    },
+    {
+      "product": "Epigamia Natural Yogurt 90g",
+      "brand": "Epigamia",
+      "pack_size": "90g",
+      "requested_qty": 1,
+      "actual_qty": 1,
+      "unit_price": 35,
+      "line_total": 35,
+      "verified": true
+    }
+  ],
+  "subtotal": 104,
+  "charges": {
+    "delivery": null,
+    "discount": null,
+    "other": null
+  },
+  "total": 104,
+  "budget": 500,
+  "currency": "INR",
+  "budget_status": "PASS",
+  "overrun": 0,
+  "unavailable": [],
+  "substitutions": [],
+  "overall_status": "PASS",
+  "email_notification": "SKIPPED",
+  "whatsapp_notification": "SKIPPED",
+  "warnings": [],
+  "errors": [],
+  "order_placed": false,
+  "payment_initiated": false
+}

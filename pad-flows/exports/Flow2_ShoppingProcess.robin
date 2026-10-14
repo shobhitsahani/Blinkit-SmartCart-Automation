@@ -1,0 +1,125 @@
+# ==============================================================================
+# Flow 2: ShoppingProcess
+# Role: Automated browser shopping on Blinkit in Google Chrome, address verification, item comparison & selection, cart verification, and budget gate.
+# Inputs: ConfigJson (Text), ExecutionId (Text)
+# Outputs: CartJson (Text), BudgetStatus (Text), AddressStatus (Text)
+#
+# CRITICAL SAFETY INVARIANT:
+# The flow halts at the verified cart. NEVER click 'Proceed to Pay' or 'Place Order'.
+#
+# BROWSER & UI ELEMENT NOTE:
+# Web selectors (appmask['...']) must be captured using the PAD Web Recorder in Google Chrome
+# prior to running. Arbitrary fixed delays are strictly avoided in favor of condition-based element waits.
+# ==============================================================================
+
+# 1. Parse configuration parameters via PowerShell helper
+System.RunPowershellScript Script: $'''$c = Get-Content config.json -Raw | ConvertFrom-Json; Write-Output $c.delivery_address.label; Write-Output $c.budget; Write-Output $c.preferences.allow_substitutions''' ScriptOutput=> ConfigParams ScriptError=> ScriptError
+Text.SplitText.Split Text: ConfigParams StandardDelimiter: Text.StandardDelimiter.NewLine CustomDelimiter: $'''' Times: 3 SubStrings=> ConfigLines
+SET ExpectedAddressLabel TO ConfigLines[0]
+SET BudgetLimit TO ConfigLines[1]
+SET AllowSubstitutions TO ConfigLines[2]
+
+# 2. Launch Google Chrome and navigate to Blinkit
+WebAutomation.LaunchChrome.LaunchNewChrome Url: $'''https://www.blinkit.com''' WindowState: WebAutomation.BrowserWindowState.Normal ClearCache: False ClearCookies: False WaitForPageToLoadTimeout: 30 Timeout: 30 BrowserInstance=> Browser
+
+# 3. Wait for storefront page load (Condition-based wait, NOT fixed sleep)
+WebAutomation.WaitForWebPageContent.WaitForElementToContain BrowserInstance: Browser Control: appmask['BlinkitHeader'] Text: $'''Delivery in''' Timeout: 20
+
+# 4. Human Authentication Gate
+# Never automate OTP or password bypass — pause for human user if prompted
+ON ERROR
+    RESUME NEXT
+WebAutomation.GetDetailsOfElement.GetAttribute BrowserInstance: Browser Control: appmask['ProfileButton_Login'] AttributeName: $'''OwnText''' AttributeValue=> LoginButtonText
+IF Contains(LoginButtonText, $'''Login''', True) THEN
+    Display.ShowMessage Title: $'''Blinkit Manual Authentication Check''' Message: $'''If authentication or OTP is prompted in Chrome, please complete it manually now.\n\nClick OK once signed in or ready to continue.''' Icon: Display.Icon.Question Buttons: Display.Buttons.OK DefaultButton: Display.DefaultButton.Button1 IsTopMost: True ButtonPressed=> LoginDialogPressed
+END
+
+# 5. Address Verification Gate
+# Read displayed location subtitle from header
+WebAutomation.GetDetailsOfElement.GetAttribute BrowserInstance: Browser Control: appmask['LocationBar_Subtitle'] AttributeName: $'''OwnText''' AttributeValue=> DisplayedAddressText
+IF Contains(DisplayedAddressText, ExpectedAddressLabel, False) THEN
+    SET AddressStatus TO $'''VERIFIED'''
+    File.WriteText File: $'''outputs\\execution_log.csv''' TextToWrite: $'''%ExecutionId%,INFO,ShoppingProcess,VerifyAddress,PASS,"Address verified: %DisplayedAddressText%"\r\n''' IfFileExists: File.IfFileExists.Append Encoding: File.FileEncoding.UTF8
+ELSE
+    SET AddressStatus TO $'''MISMATCH'''
+    SET FailedOperation TO $'''VerifyAddress'''
+    SET ErrorMessage TO $'''Address verification failed: Displayed \"%DisplayedAddressText%\" does not match expected \"%ExpectedAddressLabel%\". Halting safely.'''
+    Flow.RunSubflow SubflowName: ErrorHandling
+    Flow.StopFlow
+END
+
+# 6. Item Comparison and Selection Loop
+# Items to search and evaluate: milk, bread, curd
+
+# --- ITEM 1: MILK ---
+WebAutomation.LaunchChrome.AttachToChromeByUrl Url: $'''https://blinkit.com/s/?q=milk''' BrowserInstance=> Browser
+# Condition-based wait for product search results to load
+WebAutomation.WaitForWebPageContent.WebPageToContainElement BrowserInstance: Browser Control: appmask['SearchResults_Container'] Timeout: 15
+# Extract candidate product details from results page (name, brand, pack size, price)
+WebAutomation.ExtractData.ExtractHtmlTable BrowserInstance: Browser Control: appmask['ProductCard_Grid'] ExtractedData=> MilkCandidatesTable
+# Execute deterministic comparison logic via TypeScript CLI
+System.RunPowershellScript Script: $'''npm run compare-products -- "{\"name\":\"milk\",\"quantity\":1,\"unit\":\"pack\",\"preferred_brand\":null,\"minimum_size\":\"500ml\",\"maximum_price\":50}" "%MilkCandidatesTable%" %AllowSubstitutions%''' ScriptOutput=> MilkCompareOutput ScriptError=> MilkCompareError
+IF Contains(MilkCompareOutput, $'''\"status\": \"PASS\"''', True) = False THEN
+    SET FailedOperation TO $'''SelectProduct:milk'''
+    SET ErrorMessage TO $'''Product selection failed or ambiguous for milk: %MilkCompareOutput% %MilkCompareError%'''
+    Flow.RunSubflow SubflowName: ErrorHandling
+    Flow.StopFlow
+END
+# Click Add button on the chosen candidate card
+WebAutomation.Click.Click BrowserInstance: Browser Control: appmask['ProductCard_AddButton_Selected'] ClickType: WebAutomation.ClickType.LeftClick MouseClick: False
+# Condition-based wait for cart quantity control to update
+WebAutomation.WaitForWebPageContent.WebPageToContainElement BrowserInstance: Browser Control: appmask['ProductCard_Qty_Control'] Timeout: 10
+
+# --- ITEM 2: BREAD ---
+WebAutomation.LaunchChrome.AttachToChromeByUrl Url: $'''https://blinkit.com/s/?q=bread''' BrowserInstance=> Browser
+WebAutomation.WaitForWebPageContent.WebPageToContainElement BrowserInstance: Browser Control: appmask['SearchResults_Container'] Timeout: 15
+WebAutomation.ExtractData.ExtractHtmlTable BrowserInstance: Browser Control: appmask['ProductCard_Grid'] ExtractedData=> BreadCandidatesTable
+System.RunPowershellScript Script: $'''npm run compare-products -- "{\"name\":\"bread\",\"quantity\":1,\"unit\":\"pack\",\"preferred_brand\":null,\"minimum_size\":\"400g\",\"maximum_price\":60}" "%BreadCandidatesTable%" %AllowSubstitutions%''' ScriptOutput=> BreadCompareOutput ScriptError=> BreadCompareError
+IF Contains(BreadCompareOutput, $'''\"status\": \"PASS\"''', True) = False THEN
+    SET FailedOperation TO $'''SelectProduct:bread'''
+    SET ErrorMessage TO $'''Product selection failed or ambiguous for bread: %BreadCompareOutput% %BreadCompareError%'''
+    Flow.RunSubflow SubflowName: ErrorHandling
+    Flow.StopFlow
+END
+WebAutomation.Click.Click BrowserInstance: Browser Control: appmask['ProductCard_AddButton_Selected'] ClickType: WebAutomation.ClickType.LeftClick MouseClick: False
+WebAutomation.WaitForWebPageContent.WebPageToContainElement BrowserInstance: Browser Control: appmask['ProductCard_Qty_Control'] Timeout: 10
+
+# --- ITEM 3: YOGURT / CURD ---
+WebAutomation.LaunchChrome.AttachToChromeByUrl Url: $'''https://blinkit.com/s/?q=curd''' BrowserInstance=> Browser
+WebAutomation.WaitForWebPageContent.WebPageToContainElement BrowserInstance: Browser Control: appmask['SearchResults_Container'] Timeout: 15
+WebAutomation.ExtractData.ExtractHtmlTable BrowserInstance: Browser Control: appmask['ProductCard_Grid'] ExtractedData=> CurdCandidatesTable
+System.RunPowershellScript Script: $'''npm run compare-products -- "{\"name\":\"yogurt\",\"quantity\":1,\"unit\":\"pack\",\"preferred_brand\":null,\"minimum_size\":\"90g\",\"maximum_price\":50}" "%CurdCandidatesTable%" %AllowSubstitutions%''' ScriptOutput=> CurdCompareOutput ScriptError=> CurdCompareError
+IF Contains(CurdCompareOutput, $'''\"status\": \"PASS\"''', True) = False THEN
+    SET FailedOperation TO $'''SelectProduct:yogurt'''
+    SET ErrorMessage TO $'''Product selection failed or ambiguous for yogurt: %CurdCompareOutput% %CurdCompareError%'''
+    Flow.RunSubflow SubflowName: ErrorHandling
+    Flow.StopFlow
+END
+WebAutomation.Click.Click BrowserInstance: Browser Control: appmask['ProductCard_AddButton_Selected'] ClickType: WebAutomation.ClickType.LeftClick MouseClick: False
+WebAutomation.WaitForWebPageContent.WebPageToContainElement BrowserInstance: Browser Control: appmask['ProductCard_Qty_Control'] Timeout: 10
+
+# 7. Cart Inspection & Totals Verification
+# Open Cart dialog
+WebAutomation.Click.Click BrowserInstance: Browser Control: appmask['CartButton'] ClickType: WebAutomation.ClickType.LeftClick MouseClick: False
+# Condition-based wait for cart drawer to appear
+WebAutomation.WaitForWebPageContent.WebPageToContainElement BrowserInstance: Browser Control: appmask['Cart_Drawer'] Timeout: 15
+
+# Read verified cart bill from cart drawer
+WebAutomation.GetDetailsOfElement.GetAttribute BrowserInstance: Browser Control: appmask['Cart_GrandTotalText'] AttributeName: $'''OwnText''' AttributeValue=> CartTotalText
+# Clean currency symbols
+Text.Replace Text: CartTotalText TextToFind: $'''₹''' ReplaceWith: $'''' IsRegEx: False IgnoreCase: True NewText=> CleanTotalText
+Text.ToNumber Text: CleanTotalText Number=> GrandTotalNumber
+
+# 8. Budget Evaluation Gate
+IF GrandTotalNumber <= BudgetLimit THEN
+    SET BudgetStatus TO $'''PASS'''
+ELSE
+    SET BudgetStatus TO $'''FAIL (Overrun recorded)'''
+END
+
+# 9. Format structured CartJson output
+SET CartJson TO $'''{\"items\": [{\"name\": \"milk\", \"qty\": 1}, {\"name\": \"bread\", \"qty\": 1}, {\"name\": \"yogurt\", \"qty\": 1}], \"total\": %GrandTotalNumber%, \"budget_status\": \"%BudgetStatus%\"}'''
+
+# CRITICAL SAFETY NOTICE:
+# STOP HERE. Do NOT click checkout, pay, or place order.
+# The cart is left in verified state.

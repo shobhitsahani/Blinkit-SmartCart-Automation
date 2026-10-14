@@ -1,0 +1,28 @@
+{
+  "name": "blinkit-smartcart-automation",
+  "version": "0.1.0",
+  "description": "Blinkit SmartCart Automation — PAD-first RPA internship assignment; TypeScript support modules (config validation, safety logic, reports, tests).",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "validate-config": "tsx src/config/loader.ts",
+    "compare-products": "tsx src/shopping/cliCompare.ts",
+    "gen-summary": "tsx src/reports/runSample.ts",
+    "dev": "tsx watch src/server.ts",
+    "copy-flow": "powershell -ExecutionPolicy Bypass -File scripts/copy_flow.ps1",
+    "doctor": "tsx src/doctor.ts"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.16.2",
+    "typescript": "^5.6.3",
+    "vitest": "^2.1.5"
+  },
+  "license": "UNLICENSED",
+  "private": true
+}

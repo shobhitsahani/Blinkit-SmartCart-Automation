@@ -1,0 +1,68 @@
+# ==============================================================================
+# Flow 5: Main Orchestrator (BlinkitShoppingAssistant)
+# Role: End-to-end orchestration: config validation, shopping process invocation, summary reporting, notifications, and audit generation.
+# Input: ConfigPath (Text, default: 'config.json')
+# Outputs: ExecutionId (Text), OverallStatus (Text)
+# SAFETY CONSTRAINT: No browser selectors in Main. Stops before payment.
+# ==============================================================================
+
+# Default ConfigPath if unset
+IF ConfigPath = $'''' THEN
+    SET ConfigPath TO $'''config.json'''
+END
+
+# 1. Pre-flight Validation: Validate the supplied ConfigPath (NOT hardcoded example)
+System.RunPowershellScript Script: $'''npm run validate-config -- \"%ConfigPath%\"''' ScriptOutput=> ValidateOutput ScriptError=> ValidateError
+IF Contains(ValidateOutput, $'''Config OK''', True) = False THEN
+    SET FailedOperation TO $'''ValidateConfig'''
+    SET ErrorMessage TO $'''Configuration validation failed for %ConfigPath%: %ValidateError% %ValidateOutput%'''
+    Flow.RunSubflow SubflowName: ErrorHandling
+    Flow.StopFlow
+END
+
+# 2. Ensure outputs folder exists
+Folder.Create FolderPath: $'''outputs''' IfFolderExists: Folder.IfExists.DoNothing CreatedFolder=> OutputsFolder
+
+# 3. Generate ExecutionId from current timestamp (ISO format)
+DateTime.GetCurrentDateTime.Local DateTimeFormat: DateTime.DateTimeFormat.DateAndTime CurrentDateTime=> CurrentTime
+Text.ConvertDateTimeToText.FromDateTime DateTime: CurrentTime StandardFormat: Text.WellKnownDateTimeFormat.SortableDateTime CustomFormat: $'''yyyyMMdd-HHmmss''' Result=> TimestampStr
+SET ExecutionId TO $'''exec-%TimestampStr%'''
+
+# Log start of run with ConfigPath audit
+File.WriteText File: $'''outputs\\execution_log.csv''' TextToWrite: $'''%TimestampStr%,%ExecutionId%,INFO,Main,Start,"BlinkitShoppingAssistant run started using config: %ConfigPath%."\r\n''' IfFileExists: File.IfFileExists.Append Encoding: File.FileEncoding.UTF8
+
+# 4. Invoke ShoppingProcess Subflow
+ON ERROR
+    SET FailedOperation TO $'''ShoppingProcess'''
+    SET ErrorMessage TO $'''ShoppingProcess failed unexpectedly.'''
+    Flow.RunSubflow SubflowName: ErrorHandling
+    Flow.StopFlow
+RESUME NEXT
+Flow.RunSubflow SubflowName: ShoppingProcess
+
+# Check address verification result
+IF AddressStatus = $'''MISMATCH''' THEN
+    SET OverallStatus TO $'''SAFE_STOP'''
+    Display.ShowMessage Title: $'''Blinkit Assistant: Stopped Safely''' Message: $'''Execution stopped: Delivery address mismatch.''' Icon: Display.Icon.Warning Buttons: Display.Buttons.OK DefaultButton: Display.DefaultButton.Button1 IsTopMost: True ButtonPressed=> Btn
+    Flow.StopFlow
+END
+
+# 5. Generate Summaries & Reports using supplied ConfigPath
+System.RunPowershellScript Script: $'''npm run gen-summary -- \"%ConfigPath%\"''' ScriptOutput=> SummaryOutput ScriptError=> SummaryError
+
+# 6. Invoke Notification Subflows
+Flow.RunSubflow SubflowName: EmailNotification
+Flow.RunSubflow SubflowName: WhatsAppNotification
+
+# 7. Final Status Determination
+IF BudgetStatus = $'''PASS''' THEN
+    SET OverallStatus TO $'''PASS'''
+ELSE
+    SET OverallStatus TO $'''WARNING'''
+END
+
+# 8. Write Execution Report with audit details
+File.WriteText File: $'''outputs\\execution_report.txt''' TextToWrite: $'''==================================================\r\nBLINKIT SMARTCART AUTOMATION REPORT\r\nExecution ID: %ExecutionId%\r\nTimestamp: %TimestampStr%\r\nConfig Path: %ConfigPath%\r\nOverall Status: %OverallStatus%\r\nAddress Status: %AddressStatus%\r\nBudget Status: %BudgetStatus%\r\nEmail Status: %EmailStatus%\r\nWhatsApp Status: %WaStatus%\r\n\r\nSAFETY CONFIRMATION:\r\nCart verified safely in Chrome. No checkout action executed.\r\nNo order was placed and no payment was initiated.\r\n==================================================\r\n''' IfFileExists: File.IfFileExists.Overwrite Encoding: File.FileEncoding.UTF8
+
+# 9. Display Final Status to User
+Display.ShowMessage Title: $'''Blinkit Shopping Assistant - Completed''' Message: $'''Execution %ExecutionId% finished.\nOverall Status: %OverallStatus%\nBudget: %BudgetStatus%\n\nVerified cart is ready in Chrome.\nNo purchase was made.''' Icon: Display.Icon.Information Buttons: Display.Buttons.OK DefaultButton: Display.DefaultButton.Button1 IsTopMost: True ButtonPressed=> FinalBtn

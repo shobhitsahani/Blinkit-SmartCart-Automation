@@ -1,0 +1,27 @@
+# ==============================================================================
+# Flow 3: EmailNotification
+# Role: Sends order summary via approved email integration; skips delivery safely in test_mode.
+# Inputs: SummaryJson (Text), Recipient (Text), TestMode (Text)
+# Outputs: EmailStatus (Text)
+# ==============================================================================
+
+# 1. Capture timestamp in ISO 8601 format BEFORE branching (ensures timestamp is never empty)
+DateTime.GetCurrentDateTime.Local DateTimeFormat: DateTime.DateTimeFormat.DateAndTime CurrentDateTime=> CurrentTime
+Text.ConvertDateTimeToText.FromDateTime DateTime: CurrentTime StandardFormat: Text.WellKnownDateTimeFormat.SortableDateTime CustomFormat: $'''yyyy-MM-ddTHH:mm:ss''' Result=> CurrentTimestamp
+
+# 2. Check test_mode flag
+IF TestMode = $'''true''' OR TestMode = True THEN
+    # In test_mode: record drafted state, do NOT send real email
+    File.WriteText File: $'''outputs\\execution_log.csv''' TextToWrite: $'''%CurrentTimestamp%,EmailNotification,INFO,SendEmail,SKIPPED,"test_mode=true: Email to %Recipient% drafted, NOT sent. Summary: %SummaryJson%"\r\n''' IfFileExists: File.IfFileExists.Append Encoding: File.FileEncoding.UTF8
+    SET EmailStatus TO $'''SKIPPED'''
+ELSE
+    # Live mode: Send email via approved user connection (no passwords hardcoded)
+    ON ERROR
+        SET EmailStatus TO $'''FAILED'''
+        File.WriteText File: $'''outputs\\execution_log.csv''' TextToWrite: $'''%CurrentTimestamp%,EmailNotification,ERROR,SendEmail,FAILED,"Email delivery failed to %Recipient%"\r\n''' IfFileExists: File.IfFileExists.Append Encoding: File.FileEncoding.UTF8
+        EXIT SUBFLOW
+    RESUME NEXT
+    Email.SendEmail.SendEmail ThroughExchange: False SmtpServer: $'''smtp.gmail.com''' ServerPort: 587 EnableSsl: True From: $'''no-reply@blinkit-assistant.local''' To: Recipient Subject: $'''Blinkit SmartCart Shopping Summary''' Body: SummaryJson IsBodyHtml: False
+    SET EmailStatus TO $'''SENT'''
+    File.WriteText File: $'''outputs\\execution_log.csv''' TextToWrite: $'''%CurrentTimestamp%,EmailNotification,INFO,SendEmail,SENT,"Email delivered to %Recipient%"\r\n''' IfFileExists: File.IfFileExists.Append Encoding: File.FileEncoding.UTF8
+END

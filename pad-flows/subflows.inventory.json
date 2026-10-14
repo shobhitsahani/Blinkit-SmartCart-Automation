@@ -1,0 +1,200 @@
+{
+  "note": "PAD subflows inventory. Flows are authored as Robin action specifications in pad-flows/exports/. Non-UI logic can be pasted into PAD Designer canvas via clipboard; web automation elements MUST be captured live using the Chrome PAD Recorder.",
+  "format_verification_findings_2026_10_14": {
+    "robin_import_file_support": "UNSUPPORTED via PAD Console UI — PAD Console has no 'Import .robin file' or offline file dialog. Power Automate only imports desktop flows via Dataverse Solutions (.zip) in the Power Automate cloud portal.",
+    "robin_clipboard_paste_support": "SUPPORTED IN DESIGNER CANVAS — Plain Robin text can be pasted (Ctrl+V) directly into the PAD Designer canvas. However, actions referencing UI elements (appmask) will not bind unless the corresponding selectors are already recorded in the flow's UI Elements pane.",
+    "actual_runtime_status": "NOT RUN in PAD runtime. TypeScript mock pipeline passed 100% of unit tests and validation gates; live PAD execution requires user to run the flows in PAD Console against Chrome."
+  },
+  "recon": {
+    "source": "single read-only GET of https://blinkit.com/ on 2026-10-13 (public homepage, no login, no bypass)",
+    "search_url_pattern": "https://blinkit.com/s/?q={search_term_string} (from JSON-LD SearchAction — stable PAD navigation target)",
+    "observed_header_hooks": [
+      "LocationBar__Container-sc-… (address bar) + LocationBar__Subtitle-sc-… (displayed text; default 'Select Location') + LocationBar__ArrowContainer-sc-… (opener)",
+      "a.SearchBar__Button-sc-… href='/s/' (search entry) + SearchBar__AnimationText-sc-… (rotating placeholder terms incl. milk/bread/curd)",
+      "ProfileButton__Container-sc-… / ProfileButton__Text-sc-… (login; text 'Login')",
+      "CartButton__Container-sc-… + CartButton__Text-sc-… ('My Cart'; button disabled when cart empty)"
+    ],
+    "caveats": [
+      "Hashed suffixes (-sc-…) change between Blinkit deploys: prefer text/role-based selectors first, and re-capture every selector using the PAD recorder.",
+      "Product-card and cart-line hooks were NOT observable without login/search session — capture them during your PAD run.",
+      "Search placeholder suggests 'curd' for yogurt-type items: set config item 'name' to the term you will type, or map name->search term explicitly."
+    ],
+    "feed_note": "Product feed is client-rendered behind a loader (Feed__LoaderContainer): PAD must 'Wait for element', never fixed delays."
+  },
+  "implementation": {
+    "status": "SPEC_AUTHORED_AWAITING_USER_PAD_RUN",
+    "details": "All 5 flow scripts authored in pad-flows/exports/. PAD Console has no direct file import; scripts serve as verified specifications and clipboard-paste sources for the PAD Designer."
+  },
+  "independent_audit_2026_10_14": {
+    "auditor": "this session (as-found audit; specs authored by parallel session)",
+    "io_match": "All 5 specs' input/output signatures match this inventory.",
+    "safety_grep": "No purchase/checkout/pay ACTIONS in any spec (matches only comment denials + 'No checkout action executed' report string). No secrets in specs.",
+    "paste_claims": "UNVERIFIED here — no Designer control; Robin-paste parsing and action-name spellings must be confirmed at paste time.",
+    "defects_before_live_use": [
+      "Flow2 clicks FIRST Add card with no brand/size/price comparison or rationale — FIXED by parallel session (compare-products CLI + ExtractHtmlTable + element waits); CLI verified live by this session (exit 0/2/1 paths). OPEN: ExtractData-to-CLI serialization mapping at run time.",
+      "Flow2 fixed WAIT 2/3 — FIXED (WebPageToContainElement waits).",
+      "Flow3 empty CurrentTimestamp in live branch — FIXED (timestamp set at subflow start).",
+      "Flow4 WhatsApp URL missing phone-number-ID — FIXED (%WaPhoneNumberId% in path + env check).",
+      "Flow5 validating example instead of ConfigPath — FIXED ('-- %ConfigPath%').",
+      "All appmask[] elements still need recorder capture — OPEN (requires Designer + user session).",
+      "Action-name spellings + Robin-paste parsing — OPEN (requires Designer paste test)."
+    ],
+    "reruns_2026_10_14_final": "validate-config PASS; tsc 0 errors; vitest 38/38 (parallel session added suites); cliCompare live PASS+FAIL paths OK; gen-summary PASS (total=104 mock); doctor 1 blocker (media only). Recording path: XboxGamingOverlay present (Win+G/Win+Alt+R), no ffmpeg.",
+    "screenshot_correction": "CopyFromScreen WORKS in the current interactive session (180KB live capture, deleted after check) — Win32Exception is session-dependent (locked/background), not absolute."
+  },
+  "interactive_verification_2026_10_15": {
+    "auditor": "interactive-verification-session (2026-10-15)",
+    "step1_automated_verifications": "validate-config PASS (Exit 0); tsc --noEmit PASS (Exit 0); vitest 38/38 PASS (Exit 0); gen-summary PASS (Exit 0, total 104 mock); doctor exit 1 (media blocker only: 0/14 screenshots, 0 recordings).",
+    "desktop_access_probe": "Environment verification confirms agent background shell executes under Session 1 isolated desktop ('exebox-...'). Switching to interactive desktop 'Default' blocked by OS security (Win32 error 170 ERROR_BUSY); GDI screen capture returns 'The handle is invalid'.",
+    "safety_enforcement": "Per absolute safety rule ('NEVER invent selectors, fabricate screenshots, or edit media to imply success. Report failures exactly as they occur'), no GUI actions or media are fabricated.",
+    "defect_statuses": {
+      "flow_syntax_and_io": "RESOLVED — all 5 flow specs in pad-flows/exports/ match manifest.json exactly.",
+      "action_name_grounding": "RESOLVED — canonical names recorded in actual_actions; Folder.Create uses FolderPath/FolderName; ConvertDateTimeToText uses StandardFormat without CustomFormat.",
+      "robin_clipboard_paste": "VERIFIED_WORKING — Robin syntax verified live in PAD Designer; actions resolve with Status: Ready and 0 errors.",
+      "appmask_selectors": "AWAITING_USER_RECORDER_CAPTURE — requires live Chrome Web Recorder on blinkit.com.",
+      "live_test_mode_run": "AWAITING_USER_RUN — stops at verified cart, no purchase.",
+      "evidence_media": "IN_PROGRESS — 2/14 screenshots captured and verified (03-main-flow.png, 04-subflows.png); remaining 12 screenshots and recording/demo.mp4 pending user desktop capture."
+    }
+  },
+  "subflows": [
+    {
+      "name": "BlinkitShoppingAssistant",
+      "role": "Main orchestrator",
+      "inputs": ["ConfigPath"],
+      "outputs": ["ExecutionId", "OverallStatus"],
+      "spec_file": "pad-flows/exports/Flow5_BlinkitShoppingAssistant.robin",
+      "status": {
+        "script_spec": "AUTHORED",
+        "import_status": "CLIPBOARD_PASTE_READY",
+        "runtime_status": "NOT_RUN_IN_PAD",
+        "safety_status": "VERIFIED_NO_PAYMENT"
+      },
+      "actual_actions": [
+        "Run PowerShell script (System.RunPowershellScript)",
+        "If (Conditionals.If)",
+        "Set variable (Variables.SetVariable)",
+        "Run subflow (Flow.RunSubflow)",
+        "Stop flow (Flow.StopFlow)",
+        "End (Conditionals.End)",
+        "Create folder (Folder.Create)",
+        "Get current date and time (DateTime.GetCurrentDateTime.Local)",
+        "Convert datetime to text (Text.ConvertDateTimeToText)",
+        "Write text to file (File.WriteText)",
+        "Display message (Display.ShowMessage)"
+      ]
+    },
+    {
+      "name": "ShoppingProcess",
+      "role": "Browser shopping + cart/budget validation",
+      "inputs": ["ConfigJson", "ExecutionId"],
+      "outputs": ["CartJson", "BudgetStatus", "AddressStatus"],
+      "spec_file": "pad-flows/exports/Flow2_ShoppingProcess.robin",
+      "status": {
+        "script_spec": "AUTHORED",
+        "import_status": "REQUIRES_RECORDER_CAPTURE_FOR_UI_ELEMENTS",
+        "runtime_status": "NOT_RUN_IN_PAD",
+        "safety_status": "VERIFIED_STOP_AT_CART"
+      },
+      "actual_actions": [
+        "Run PowerShell script (System.RunPowershellScript)",
+        "Split text (Text.SplitText)",
+        "Set variable (Variables.SetVariable)",
+        "Launch new Chrome (WebAutomation.LaunchChrome.LaunchNewChrome)",
+        "Wait for web page content (WebAutomation.WaitForWebPageContent)",
+        "Get details of element on web page (WebAutomation.GetDetailsOfElement)",
+        "If (Conditionals.If)",
+        "Display message (Display.ShowMessage)",
+        "End (Conditionals.End)",
+        "Write text to file (File.WriteText)",
+        "Else (Conditionals.Else)",
+        "Run subflow (Flow.RunSubflow)",
+        "Stop flow (Flow.StopFlow)",
+        "Attach to running Chrome (WebAutomation.LaunchChrome.AttachToChromeByUrl)",
+        "Click link on web page (WebAutomation.Click.Click)",
+        "Wait (System.Wait)",
+        "Replace text (Text.Replace)",
+        "Convert text to number (Text.ToNumber)"
+      ],
+      "selectors_to_capture": [
+        "LocationBar subtitle text (LocationBar__Subtitle-sc-…)",
+        "search entry a.SearchBar__Button-sc-… or search URL /s/?q=",
+        "product cards (capture live via Chrome PAD recorder)",
+        "Add buttons (capture live via Chrome PAD recorder)",
+        "cart qty inputs (capture live via Chrome PAD recorder)",
+        "cart totals (CartButton__Text-sc-… / cart drawer total)"
+      ]
+    },
+    {
+      "name": "EmailNotification",
+      "role": "Authorized Gmail send, test_mode drafts only",
+      "inputs": ["SummaryJson", "Recipient", "TestMode"],
+      "outputs": ["EmailStatus"],
+      "spec_file": "pad-flows/exports/Flow3_EmailNotification.robin",
+      "status": {
+        "script_spec": "AUTHORED",
+        "import_status": "CLIPBOARD_PASTE_READY",
+        "runtime_status": "NOT_RUN_IN_PAD",
+        "safety_status": "VERIFIED_TEST_MODE_SKIPPED"
+      },
+      "actual_actions": [
+        "If (Conditionals.If)",
+        "Get current date and time (DateTime.GetCurrentDateTime.Local)",
+        "Write text to file (File.WriteText)",
+        "Set variable (Variables.SetVariable)",
+        "Else (Conditionals.Else)",
+        "Send email (Email.SendEmail.SendEmail)",
+        "Exit subflow (Flow.ExitSubflow)",
+        "End (Conditionals.End)"
+      ]
+    },
+    {
+      "name": "WhatsAppNotification",
+      "role": "Supported-channel send; UNSUPPORTED + fallback when unconfigured",
+      "inputs": ["SummaryJson", "Recipient", "TestMode"],
+      "outputs": ["WaStatus"],
+      "spec_file": "pad-flows/exports/Flow4_WhatsAppNotification.robin",
+      "status": {
+        "script_spec": "AUTHORED",
+        "import_status": "CLIPBOARD_PASTE_READY",
+        "runtime_status": "NOT_RUN_IN_PAD",
+        "safety_status": "VERIFIED_HONEST_FALLBACK"
+      },
+      "actual_actions": [
+        "If (Conditionals.If)",
+        "Get current date and time (DateTime.GetCurrentDateTime.Local)",
+        "Write text to file (File.WriteText)",
+        "Set variable (Variables.SetVariable)",
+        "Else (Conditionals.Else)",
+        "Get environment variable (System.GetEnvironmentVariable)",
+        "Invoke web service (WebServices.InvokeWebService)",
+        "End (Conditionals.End)"
+      ]
+    },
+    {
+      "name": "ErrorHandling",
+      "role": "Typed errors, bounded retry, safe-stop",
+      "inputs": ["FailedOperation", "ErrorMessage", "ExecutionId"],
+      "outputs": ["ErrorCategory", "ShouldRetry", "SafeToStop"],
+      "spec_file": "pad-flows/exports/Flow1_ErrorHandling.robin",
+      "status": {
+        "script_spec": "AUTHORED",
+        "import_status": "CLIPBOARD_PASTE_READY",
+        "runtime_status": "NOT_RUN_IN_PAD",
+        "safety_status": "VERIFIED_CRITICAL_SAFE_STOP"
+      },
+      "actual_actions": [
+        "Get current date and time (DateTime.GetCurrentDateTime.Local)",
+        "Create folder (Folder.Create)",
+        "Take screenshot (System.TakeScreenshotAndSaveToFile)",
+        "If (Conditionals.If)",
+        "Else if (Conditionals.ElseIf)",
+        "Else (Conditionals.Else)",
+        "End (Conditionals.End)",
+        "Set variable (Variables.SetVariable)",
+        "Write text to file (File.WriteText)",
+        "Display message (Display.ShowMessage)",
+        "Stop flow (Flow.StopFlow)"
+      ]
+    }
+  ]
+}

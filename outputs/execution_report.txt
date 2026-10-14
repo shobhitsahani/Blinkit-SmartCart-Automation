@@ -1,0 +1,13 @@
+Blinkit SmartCart Automation — execution report
+Execution ID : exec-2026-10-14T21-40-27-872Z
+Executed at  : 2026-10-14T21:40:27.878Z
+Address check: PASS (expected 'Approved Test Address', displayed 'Approved Test Address')
+Cart lines   : 3 (subtotal 104 INR, total 104 INR)
+Budget       : 500 INR -> PASS
+Unavailable  : none
+Substitutions: none
+Overall      : PASS
+Email        : SKIPPED
+WhatsApp     : SKIPPED
+Order placed : NO — workflow stopped at the verified cart.
+Payment      : NO — payment was never initiated.

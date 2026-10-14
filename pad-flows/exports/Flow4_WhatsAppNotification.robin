@@ -1,0 +1,43 @@
+# ==============================================================================
+# Flow 4: WhatsAppNotification
+# Role: Delivers cart notification via WhatsApp Business Platform; logs fallback honestly when unconfigured.
+# Inputs: SummaryJson (Text), Recipient (Text), TestMode (Text)
+# Outputs: WaStatus (Text)
+# ==============================================================================
+
+# 1. Capture timestamp in ISO 8601 format BEFORE branching (ensures timestamp is never empty)
+DateTime.GetCurrentDateTime.Local DateTimeFormat: DateTime.DateTimeFormat.DateAndTime CurrentDateTime=> CurrentTime
+Text.ConvertDateTimeToText.FromDateTime DateTime: CurrentTime StandardFormat: Text.WellKnownDateTimeFormat.SortableDateTime CustomFormat: $'''yyyy-MM-ddTHH:mm:ss''' Result=> CurrentTimestamp
+
+# 2. Check test_mode flag
+IF TestMode = $'''true''' OR TestMode = True THEN
+    File.WriteText File: $'''outputs\\execution_log.csv''' TextToWrite: $'''%CurrentTimestamp%,WhatsAppNotification,INFO,SendWhatsApp,SKIPPED,"test_mode=true: WhatsApp message to %Recipient% drafted, NOT sent. Message: 'Blinkit SmartCart summary: verified cart ready. No payment made.'"\r\n''' IfFileExists: File.IfFileExists.Append Encoding: File.FileEncoding.UTF8
+    SET WaStatus TO $'''SKIPPED'''
+ELSE
+    # Live mode: Load credentials from environment (never hardcoded in flow)
+    System.GetEnvironmentVariable.GetEnvironmentVariable Name: $'''WHATSAPP_TOKEN''' Value=> WaToken
+    System.GetEnvironmentVariable.GetEnvironmentVariable Name: $'''WHATSAPP_PHONE_NUMBER_ID''' Value=> WaPhoneNumberId
+
+    # Verify both token and phone number ID are configured
+    IF WaToken = $'''' OR WaPhoneNumberId = $'''' THEN
+        # WhatsApp Business Platform not fully configured: record UNSUPPORTED honestly
+        File.WriteText File: $'''outputs\\execution_log.csv''' TextToWrite: $'''%CurrentTimestamp%,WhatsAppNotification,WARN,SendWhatsApp,UNSUPPORTED,"WHATSAPP_TOKEN or WHATSAPP_PHONE_NUMBER_ID missing from environment. Fallback: logged to outputs/execution_report.txt."\r\n''' IfFileExists: File.IfFileExists.Append Encoding: File.FileEncoding.UTF8
+        SET WaStatus TO $'''UNSUPPORTED'''
+    ELSE
+        # Live path: Send template message via official Meta Graph API WhatsApp Business endpoint:
+        # Endpoint: https://graph.facebook.com/v18.0/{phone-number-id}/messages
+        ON ERROR
+            SET WaStatus TO $'''FAILED'''
+            File.WriteText File: $'''outputs\\execution_log.csv''' TextToWrite: $'''%CurrentTimestamp%,WhatsAppNotification,ERROR,SendWhatsApp,FAILED,"WhatsApp API call failed to %Recipient%"\r\n''' IfFileExists: File.IfFileExists.Append Encoding: File.FileEncoding.UTF8
+            EXIT SUBFLOW
+        RESUME NEXT
+        WebServices.InvokeWebService.InvokeWebService Url: $'''https://graph.facebook.com/v18.0/%WaPhoneNumberId%/messages''' Method: WebServices.Method.Post ContentType: $'''application/json''' Headers: $'''Authorization: Bearer %WaToken%''' RequestBody: $'''{\"messaging_product\": \"whatsapp\", \"to\": \"%Recipient%\", \"type\": \"text\", \"text\": {\"body\": \"Blinkit SmartCart summary ready. Cart verified — no order placed.\"}}''' Response=> WaResponse StatusCode=> WaStatusCode
+        IF WaStatusCode = 200 THEN
+            SET WaStatus TO $'''SENT'''
+            File.WriteText File: $'''outputs\\execution_log.csv''' TextToWrite: $'''%CurrentTimestamp%,WhatsAppNotification,INFO,SendWhatsApp,SENT,"WhatsApp message delivered to %Recipient%"\r\n''' IfFileExists: File.IfFileExists.Append Encoding: File.FileEncoding.UTF8
+        ELSE
+            SET WaStatus TO $'''FAILED'''
+            File.WriteText File: $'''outputs\\execution_log.csv''' TextToWrite: $'''%CurrentTimestamp%,WhatsAppNotification,ERROR,SendWhatsApp,FAILED,"WhatsApp API returned status %WaStatusCode%"\r\n''' IfFileExists: File.IfFileExists.Append Encoding: File.FileEncoding.UTF8
+        END
+    END
+END

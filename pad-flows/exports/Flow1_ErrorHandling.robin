@@ -1,0 +1,70 @@
+# ==============================================================================
+# Flow 1: ErrorHandling
+# Role: Typed error classification, bounded retry logic, audit logging, and safe-stop enforcement.
+# Inputs: FailedOperation (Text), ErrorMessage (Text), ExecutionId (Text)
+# Outputs: ErrorCategory (Text), ShouldRetry (Boolean), SafeToStop (Boolean)
+# ==============================================================================
+
+# 1. Capture current date and time (ISO format)
+DateTime.GetCurrentDateTime.Local DateTimeFormat: DateTime.DateTimeFormat.DateAndTime CurrentDateTime=> CurrentTime
+Text.ConvertDateTimeToText.FromDateTime DateTime: CurrentTime StandardFormat: Text.WellKnownDateTimeFormat.SortableDateTime CustomFormat: $'''yyyy-MM-ddTHH:mm:ss''' Result=> ErrorTimestamp
+
+# 2. Ensure diagnostic directories exist
+Folder.Create FolderPath: $'''screenshots''' IfFolderExists: Folder.IfExists.DoNothing CreatedFolder=> ScreenshotFolder
+Folder.Create FolderPath: $'''outputs''' IfFolderExists: Folder.IfExists.DoNothing CreatedFolder=> OutputsFolder
+
+# 3. Take diagnostic screenshot if interactive display session is available
+ON ERROR
+    # Non-fatal if desktop handle is not available in background session
+RESUME NEXT
+System.TakeScreenshotAndSaveToFile File: $'''screenshots\\error_%ExecutionId%.png''' ImageFormat: System.ImageFormat.Png
+
+# 4. Classify ErrorCategory based on semantic rules
+# Critical failure categories: ADDRESS, CART, SAFETY, AUTH, CONFIG, PRODUCT_AMBIGUOUS
+# Non-critical / retryable: TRANSIENT
+IF Contains(ErrorMessage, $'''Safety''', True) OR Contains(ErrorMessage, $'''Order''', True) OR Contains(ErrorMessage, $'''Pay''', True) OR Contains(ErrorMessage, $'''Checkout''', True) THEN
+    SET ErrorCategory TO $'''SAFETY'''
+    SET SafeToStop TO True
+    SET ShouldRetry TO False
+ELSE IF Contains(ErrorMessage, $'''Address''', True) OR Contains(ErrorMessage, $'''Location''', True) THEN
+    SET ErrorCategory TO $'''ADDRESS'''
+    SET SafeToStop TO True
+    SET ShouldRetry TO False
+ELSE IF Contains(ErrorMessage, $'''Auth''', True) OR Contains(ErrorMessage, $'''Login''', True) OR Contains(ErrorMessage, $'''OTP''', True) OR Contains(ErrorMessage, $'''Captcha''', True) THEN
+    SET ErrorCategory TO $'''AUTH'''
+    SET SafeToStop TO True
+    SET ShouldRetry TO False
+ELSE IF Contains(ErrorMessage, $'''Ambiguous''', True) OR Contains(ErrorMessage, $'''Multiple matches''', True) THEN
+    SET ErrorCategory TO $'''PRODUCT_AMBIGUOUS'''
+    SET SafeToStop TO True
+    SET ShouldRetry TO False
+ELSE IF Contains(ErrorMessage, $'''Cart''', True) OR Contains(ErrorMessage, $'''Quantity''', True) OR Contains(ErrorMessage, $'''Price''', True) THEN
+    SET ErrorCategory TO $'''CART'''
+    SET SafeToStop TO True
+    SET ShouldRetry TO False
+ELSE IF Contains(ErrorMessage, $'''Config''', True) OR Contains(ErrorMessage, $'''Schema''', True) THEN
+    SET ErrorCategory TO $'''CONFIG'''
+    SET SafeToStop TO True
+    SET ShouldRetry TO False
+ELSE IF Contains(ErrorMessage, $'''Budget''', True) OR Contains(ErrorMessage, $'''Overrun''', True) THEN
+    SET ErrorCategory TO $'''BUDGET'''
+    SET SafeToStop TO True
+    SET ShouldRetry TO False
+ELSE IF Contains(ErrorMessage, $'''Timeout''', True) OR Contains(ErrorMessage, $'''Network''', True) OR Contains(ErrorMessage, $'''Connection''', True) OR Contains(ErrorMessage, $'''Slow''', True) THEN
+    SET ErrorCategory TO $'''TRANSIENT'''
+    SET SafeToStop TO False
+    SET ShouldRetry TO True
+ELSE
+    SET ErrorCategory TO $'''UNKNOWN'''
+    SET SafeToStop TO True
+    SET ShouldRetry TO False
+END
+
+# 5. Append structured log row to outputs/execution_log.csv
+File.WriteText File: $'''outputs\\execution_log.csv''' TextToWrite: $'''%ErrorTimestamp%,%ExecutionId%,ERROR,%FailedOperation%,%ErrorCategory%,"%ErrorMessage%"\r\n''' IfFileExists: File.IfFileExists.Append Encoding: File.FileEncoding.UTF8
+
+# 6. Enforce Safe-Stop for critical categories
+IF SafeToStop = True THEN
+    Display.ShowMessage Title: $'''PAD SmartCart: Safe-Stop Triggered''' Message: $'''Execution %ExecutionId% halted safely.\n\nCategory: %ErrorCategory%\nOperation: %FailedOperation%\nError: %ErrorMessage%\n\nSafety Invariant Enforced: No order placed, no payment initiated.''' Icon: Display.Icon.Error Buttons: Display.Buttons.OK DefaultButton: Display.DefaultButton.Button1 IsTopMost: True ButtonPressed=> ButtonPressed
+    Flow.StopFlow
+END

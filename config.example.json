@@ -1,0 +1,52 @@
+{
+  "budget": 500,
+  "currency": "INR",
+  "delivery_address": {
+    "label": "Approved Test Address"
+  },
+  "preferences": {
+    "selection_strategy": "best_value",
+    "allow_substitutions": false,
+    "allow_quantity_adjustment": false
+  },
+  "items": [
+    {
+      "name": "milk",
+      "quantity": 1,
+      "unit": "pack",
+      "preferred_brand": null,
+      "minimum_size": null,
+      "maximum_price": null
+    },
+    {
+      "name": "bread",
+      "quantity": 1,
+      "unit": "pack",
+      "preferred_brand": null,
+      "minimum_size": null,
+      "maximum_price": null
+    },
+    {
+      "name": "yogurt",
+      "quantity": 1,
+      "unit": "pack",
+      "preferred_brand": null,
+      "minimum_size": null,
+      "maximum_price": null
+    }
+  ],
+  "notifications": {
+    "email_enabled": true,
+    "email_recipient": "approved-recipient@example.com",
+    "whatsapp_enabled": true,
+    "whatsapp_recipient": "+91-XXXXXXXXXX",
+    "test_mode": true
+  },
+  "runtime": {
+    "output_dir": "outputs",
+    "screenshots_enabled": true,
+    "log_level": "INFO",
+    "max_retries": 2,
+    "timeout_ms": 15000
+  }
+}
