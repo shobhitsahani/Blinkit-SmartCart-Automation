@@ -22,6 +22,6 @@ config.json
 # Temporary scratch scripts
 scratch/
 
-# Large recordings (share via Drive link if >50MB)
-recording/*.mp4
+# Video recording (tracked when <50MB)
+!recording/demo.mp4
 !recording/.gitkeep
